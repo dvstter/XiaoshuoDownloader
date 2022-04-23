@@ -33,7 +33,7 @@ class GenericDownloader:
 	'accept-encoding': 'gzip, deflate'}
 	_Proxies = {'http': 'http://127.0.0.1:1087', 'https': 'https://127.0.0.1:1087'}
 	
-	def __init__(self, base, postfix, endpage, gbk=False, output='xiaoshuo.txt'):
+	def __init__(self, base, postfix, endpage=None, gbk=False, output='xiaoshuo.txt'):
 		self._base = base
 		self._postfix = postfix
 		self._gbk = gbk
@@ -46,7 +46,7 @@ class GenericDownloader:
 		
 	def __fetch_data(self, hfile):
 		url = self._base + self._postfix
-		if url == self._endpage:
+		if self._endpage is not None and url == self._endpage:
 			print('Running to the endpage!!!')
 			exit(0)
 		print('--------------------------------------------------------')
@@ -67,7 +67,7 @@ class GenericDownloader:
 			hfile.write(C.title + '\n\n')
 
 		# replace all the unuseful text
-		text = self.grep(C.text)
+		text = self.grep(C.content)
 		
 		# write to file
 		hfile.write(text)
@@ -105,6 +105,9 @@ class GenericDownloader:
 			w_tm = random.randint(5, 25) / 5
 			print(f'Waiting for {w_tm} secs')
 			time.sleep(w_tm)
+
+		f.close()
+		print('finished!')
 	
 	def extraction(self, bsobj):
 		pass
