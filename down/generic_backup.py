@@ -3,6 +3,7 @@ import requests
 import time
 import re
 import random
+import urllib3
 from bs4 import BeautifulSoup
 from requests.exceptions import RequestException
 
@@ -12,6 +13,8 @@ Example for parameters:
 	postfix = '/8_8557/1367719.html'
 	endpage = '/8_8557/'
 '''
+
+urllib3.disable_warnings()
 
 class DownloaderSignal:
 	OK = 0
@@ -31,27 +34,34 @@ class GenericDownloader:
 	'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Safari/537.36',
 	'cache-control': 'no-cache',
 	'accept-encoding': 'gzip, deflate'}
-	_Proxies = {'http': 'http://127.0.0.1:1087', 'https': 'https://127.0.0.1:1087'}
+	_Proxies = {'http': 'http://127.0.0.1:1087'}
 	
 	def __init__(self, base, postfix, endpage=None, gbk=False, output='xiaoshuo.txt'):
 		self._base = base
 		self._postfix = postfix
+		self._url = None
+		self.set_postfix(postfix)
 		self._gbk = gbk
 		self._output = output
 		
 		self._endpage = endpage
 
-	def setpostfix(self, postfix):
+	def set_postfix(self, postfix):
 		self._postfix = postfix
+		self._url = self._base + self._postfix
+
+	def set_whole_url(self, url):
+		self._url = url
 		
 	def __fetch_data(self, hfile):
-		url = self._base + self._postfix
+#		url = self._base + self._postfix
+		url = self._url
 		if self._endpage is not None and url == self._endpage:
 			print('Running to the endpage!!!')
 			exit(0)
 		print('--------------------------------------------------------')
 		print(f'Fetching {url}')
-		resp = requests.get(url, headers=self._Headers, proxies=self._Proxies)
+		resp = requests.get(url, headers=self._Headers, proxies=self._Proxies, verify=False)
 		if self._gbk:
 			bs = BeautifulSoup(resp.text.encode('iso-8859-1').decode('gbk', 'ignore'), 'lxml')
 		else:
