@@ -1,11 +1,15 @@
 # -*- coding:utf-8 -*-
 import requests
 import time
-import re
+import unicodedata
+import html
 import random
 import urllib3
 from bs4 import BeautifulSoup
 from requests.exceptions import RequestException
+import sys
+
+sys.setrecursionlimit(100000)
 
 '''
 Example for parameters:
@@ -34,7 +38,7 @@ class GenericDownloader:
 	'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Safari/537.36',
 	'cache-control': 'no-cache',
 	'accept-encoding': 'gzip, deflate'}
-	_Proxies = {'http': 'http://127.0.0.1:1087'}
+	_Proxies = {'http': 'http://127.0.0.1:7890'}
 	
 	def __init__(self, base, postfix, endpage=None, gbk=False, output='xiaoshuo.txt'):
 		self._base = base
@@ -74,6 +78,7 @@ class GenericDownloader:
 
 		# write title
 		if C.title_write_flag:
+			print(f'Write chapter title with {C.title}')
 			hfile.write(C.title + '\n\n')
 
 		# replace all the unuseful text
@@ -81,7 +86,7 @@ class GenericDownloader:
 		
 		# write to file
 		hfile.write(text)
-		hfile.write('\n')
+		hfile.write('\n\n')
 		hfile.flush()
 		
 		return signal, bs
@@ -124,6 +129,8 @@ class GenericDownloader:
 	
 	# optional, replace the text
 	def grep(self, text):
+		text = html.escape(text)
+		text = unicodedata.normalize('NFKD', text)
 		return text
 
 	# 1. modify the self._postfix
