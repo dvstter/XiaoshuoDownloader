@@ -7,7 +7,8 @@ class Downloader(GenericDownloader):
   def __init__(self, output_file):
     super().__init__('https://m.xinyushuwu.org', '/17/17997/848674.html', output=output_file, verbose=False)
 
-  def parse(self, bsobj):
+  @staticmethod
+  def parse(bsobj):
     content = bsobj.find('div', id='novelcontent')
     content = deepcopy(content)
     content.find('ul', class_='novelbutton').decompose()
@@ -23,14 +24,14 @@ class Downloader(GenericDownloader):
     result = Contents(text, title, write_title_flag)
     return result
 
-  def next_page(self, bsobj):
+  @staticmethod
+  def next_page(bsobj):
     next_item = bsobj.find('ul', class_='novelbutton')
     postfix = next_item.find('p', 'p1 p3').a['href']
     if postfix == '/17/17997/':
-      return False
+      return False, None
     else:
-      self.set_postfix(postfix)
-      return True
+      return True, postfix
 
 if __name__ == '__main__':
   dn = Downloader('xiaoshuo.txt')

@@ -1,8 +1,15 @@
-# Neat Text Downloder
+# Brand-new Designed Neat Text Downloader
 
 ## Files:
     1. **.py downloader instances
     3. down/generic.py brand new design for generic downloader
+
+## Features:
+✅ - **max reconnections**
+
+✅ - **auto rerun when blocked**
+
+✅ - **simpler overridden methods**
 
 ## Development Progress:
 
