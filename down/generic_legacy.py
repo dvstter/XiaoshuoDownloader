@@ -6,7 +6,7 @@ import html
 import random
 import urllib3
 from bs4 import BeautifulSoup
-from requests.exceptions import RequestException
+from collections import namedtuple
 import sys
 
 sys.setrecursionlimit(100000)
@@ -20,17 +20,11 @@ Example for parameters:
 
 urllib3.disable_warnings()
 
-class DownloaderSignal:
-	OK = 0
-	REPEAT = 1
-
-
-class ExtractionContent:
-	def __init__(self, content, title, title_write_flag):
-		self.content = content
-		self.title = title
-		self.title_write_flag = title_write_flag
-
+Contents = namedtuple('Contents', 'text title title_write_flag')
+def normalize_html_text(text):
+	text = html.escape(text)
+	text = unicodedata.normalize('NFKD', text)
+	return text
 
 class GenericDownloader:
 	# constants
@@ -40,100 +34,113 @@ class GenericDownloader:
 	'accept-encoding': 'gzip, deflate'}
 	_Proxies = {'http': 'http://127.0.0.1:7890'}
 	
-	def __init__(self, base, postfix, endpage=None, gbk=False, output='xiaoshuo.txt'):
+	def __init__(self, base, postfix, end_page=None, gbk=False, output='xiaoshuo.txt', reconnections_limit=100, verbose=True):
+		"""
+		Generic downloader, must reimplement next_page() and extraction() methods.
+
+		:param base: str, static part for url, like 'https://xx.xx.com', notice that this str should not be ended with '/'
+		:param postfix: str, variational part for url, like '/xx/xx.html', notice that this str should be started with '/'
+		:param endpage: str, full url for termination, if set to None, returning False in next_page() method to denote
+		:param gbk: bool, use gbk or not
+		:param output: str
+		:param reconnections_limit: int, maximum number for reconnection times
+		:param verbose: bool, show more information
+		"""
 		self._base = base
 		self._postfix = postfix
 		self._url = None
 		self.set_postfix(postfix)
 		self._gbk = gbk
 		self._output = output
-		
-		self._endpage = endpage
+		self._end_page = end_page
+		self._verbose = verbose
+
+		self._reconnections_limit = reconnections_limit
+		self._reconnection_counter = 0
+
+		self._episode_time = 5
+		self._max_episode = 20
+		self._episode_counter = 0
+
+	def _random_wait(self, success):
+		if success:
+			self._episode_counter = 0
+		self._episode_counter += 1
+		if self._episode_counter > self._max_episode:
+			self._episode_counter = self._max_episode
+		max_time = self._episode_counter * self._episode_time
+		rndtm = random.randint(max_time-self._episode_time, max_time)
+		if self._verbose:
+			print(f'Random waiting for {rndtm} sec')
+		time.sleep(rndtm)
 
 	def set_postfix(self, postfix):
 		self._postfix = postfix
 		self._url = self._base + self._postfix
 
-	def set_whole_url(self, url):
-		self._url = url
-		
-	def __fetch_data(self, hfile):
-#		url = self._base + self._postfix
+	def set_full_url(self, full_url):
+		self._url = full_url
+
+	def _parse_and_write(self, hfile):
 		url = self._url
-		if self._endpage is not None and url == self._endpage:
-			print('Running to the endpage!!!')
-			exit(0)
-		print('--------------------------------------------------------')
 		print(f'Fetching {url}')
 		resp = requests.get(url, headers=self._Headers, proxies=self._Proxies, verify=False)
 		if self._gbk:
 			bs = BeautifulSoup(resp.text.encode('iso-8859-1').decode('gbk', 'ignore'), 'lxml')
 		else:
 			bs = BeautifulSoup(resp.text, 'lxml')
-		
-		# extract the text
-		signal, C = self.extraction(bs)
-		if signal == DownloaderSignal.REPEAT: # something goes wrong, directly return the signal and bs
-			return signal, bs
+		C = self.parse(bs)
 
-		# write title
+		# write title and text
 		if C.title_write_flag:
-			print(f'Write chapter title with {C.title}')
+			if self._verbose:
+				print(f'Write chapter title with {C.title}')
 			hfile.write(C.title + '\n\n')
-
-		# replace all the unuseful text
-		text = self.grep(C.content)
-		
-		# write to file
-		hfile.write(text)
-		hfile.write('\n\n')
+		text = normalize_html_text(C.text)
+		hfile.write(text+'\n\n')
 		hfile.flush()
-		
-		return signal, bs
-		
+		return bs
+
 	def run(self):
 		f = open(self._output, 'w', encoding='utf-8')
 		while True:
 			try:
-				signal, bsobj = self.__fetch_data(f)
-				if signal == DownloaderSignal.REPEAT:
-					print('--------------------------------------------------------')
-					print('Got REPEAT signal!!!')
-					print('Waiting more time!!!')
-					time.sleep(random.randint(5, 10))
-					continue
-			except RequestException as e:
-				print('--------------------------------------------------------')
-				print('RequestException ERROR!!!')
-				print('Waiting more time!!!')
-				print(e)
-				time.sleep(random.randint(5,10))
-				continue
+				bsobj = self._parse_and_write(f)
+				self._reconnection_counter = 0
+				self._random_wait(True)
+				if self._verbose:
+					print('----------------------------------over----------------------------------')
 			except Exception as e:
-				print('--------------------------------------------------------')
-				print('Other exception ERROR!!!')
+				print('Exception occurred!!!')
 				print(e)
-				exit(1)
+				self._random_wait(False)
+				self._reconnection_counter += 1
+				print(f'Reconnection counter {self._reconnection_counter}')
+				if self._reconnection_counter >= self._reconnections_limit:
+					print('Max reconnections exceed, exit!!!')
+					print(f'Error url {self._url}')
+					exit(1)
 
-			if not self.next_page(bsobj):
+			next_page_end = not self.next_page(bsobj)
+			if next_page_end or (self._end_page and self._url == self._end_page):
 				break
-			w_tm = random.randint(5, 25) / 5
-			print(f'Waiting for {w_tm} secs')
-			time.sleep(w_tm)
 
 		f.close()
 		print('finished!')
-	
-	def extraction(self, bsobj):
-		pass
-	
-	# optional, replace the text
-	def grep(self, text):
-		text = html.escape(text)
-		text = unicodedata.normalize('NFKD', text)
-		return text
 
-	# 1. modify the self._postfix
-	# 2. if end, return Flase, else return True
+	# two methods must be overridden
+	def parse(self, bsobj):
+		"""
+		Parse beautifulsoup object to get text and title
+		:param bsobj: BS4 object
+		:return: Contents(text, title, title_write_flag)
+		"""
+		return Contents('', '', False)
+
 	def next_page(self, bsobj):
-		pass
+		"""
+		Turn to next page with set_postfix() and set_full_url() methods
+		:param bsobj: BS4 object
+		:return: bool, True means next page set okay, False means this whole activity is done (if end_page is set, this method can leave it behind)
+		"""
+		return True

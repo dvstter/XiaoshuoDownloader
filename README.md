@@ -2,11 +2,12 @@
 
 ## Files:
     1. **.py downloader instances
-    2. down/generic.py new version generic downloader framework (not finished and not in the schedule)
-    3. down/generic_legacy.py older version, still using
+    3. down/generic.py brand new design for generic downloader
 
 ## Development Progress:
-    1. rewrite the generic method.
 
 ## Usage:
     1. refer to xinyushuwu.py
+
+## Notice:
+    1. Other files like ak.py, cool18.py, etc. have not been updated to new version generic downloader, so these files should not be seen as reference
