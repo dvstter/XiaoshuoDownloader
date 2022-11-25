@@ -3,6 +3,7 @@ import requests
 import time
 import unicodedata
 import html
+import re
 import random
 import urllib3
 from bs4 import BeautifulSoup
@@ -22,7 +23,7 @@ urllib3.disable_warnings()
 
 Contents = namedtuple('Contents', 'text title title_write_flag')
 def normalize_html_text(text):
-	text = html.escape(text)
+	text = html.unescape(text)
 	text = unicodedata.normalize('NFKD', text)
 	return text
 
@@ -80,11 +81,11 @@ class GenericDownloader:
 
 	def set_full_url(self, full_url):
 		self._url = full_url
+		self._base, self._postfix = re.findall(r'(.+\.[a-z]+)(/.+)', full_url)[0]
 
 	def _parse_and_write(self, hfile):
-		url = self._url
-		print(f'Fetching {url}')
-		resp = requests.get(url, headers=self._Headers, proxies=self._Proxies, verify=False)
+		print(f'Fetching {self._url}')
+		resp = requests.get(self._url, headers=self._Headers, proxies=self._Proxies, verify=False)
 		if self._gbk:
 			bs = BeautifulSoup(resp.text.encode('iso-8859-1').decode('gbk', 'ignore'), 'lxml')
 		else:

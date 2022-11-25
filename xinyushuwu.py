@@ -1,5 +1,5 @@
 # -*- coding:utf-8 -*-
-from down.generic_legacy import *
+from down.generic import *
 import re
 from copy import deepcopy
 
