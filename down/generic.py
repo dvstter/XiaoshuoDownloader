@@ -6,8 +6,10 @@ import unicodedata
 import html
 import re
 import queue
+import pickle
 import random
 import urllib3
+import traceback
 from bs4 import BeautifulSoup
 from collections import namedtuple
 import sys
@@ -28,6 +30,9 @@ def normalize_html_text(text):
 	text = html.unescape(text)
 	text = unicodedata.normalize('NFKD', text)
 	return text
+
+def get_subclass_object_attributes(self, superclass_object):
+	return list((set(dir(self)) - set(dir(self.__class__))) - (set(dir(superclass_object)) - set(dir(superclass_object.__class__))))
 
 class GenericDownloader:
 	# constants
@@ -85,13 +90,17 @@ class GenericDownloader:
 			print(f'Random waiting for {rndtm} sec')
 		time.sleep(rndtm)
 
+	@staticmethod
+	def split_url(full_url):
+		return re.findall(r'(.+\.[a-z]+)(/.+)', full_url)[0]
+
 	def set_postfix(self, postfix):
 		self._postfix = postfix
 		self._url = self._base + self._postfix
 
 	def set_full_url(self, full_url):
 		self._url = full_url
-		self._base, self._postfix = re.findall(r'(.+\.[a-z]+)(/.+)', full_url)[0]
+		self._base, self._postfix = self.__class__.split_url(full_url)
 
 	@staticmethod
 	def write_contents(hfile, contents):
@@ -102,25 +111,31 @@ class GenericDownloader:
 		hfile.flush()
 
 	@staticmethod
-	def parse_text_and_next_postfix(safe_queue, url, filename, headers, proxies, gbk, parse_func, next_page_func, verbose):
+	def parse_text_and_next_postfix(safe_queue, url, headers, proxies, gbk, parse_func, next_page_func, downloader_pickle_str):
 		print(f'Fetching {url}')
 		resp = requests.get(url, headers=headers, proxies=proxies, verify=False)
 		if gbk:
 			bs = BeautifulSoup(resp.text.encode('iso-8859-1').decode('gbk', 'ignore'), 'lxml')
 		else:
 			bs = BeautifulSoup(resp.text, 'lxml')
-		contents = parse_func(bs)
-		next_page_continue, postfix = next_page_func(bs)
-		safe_queue.put((contents, next_page_continue, postfix))
+		downloader = pickle.loads(downloader_pickle_str)
+		contents = parse_func(bs, downloader)
+		next_page_continue, postfix = next_page_func(bs, downloader)
+		safe_queue.put((pickle.dumps(downloader), contents, next_page_continue, postfix))
 
 	def run(self):
 		hfile = open(self._output, 'w', encoding='utf-8')
+		new_added_attributes = get_subclass_object_attributes(self, GenericDownloader('', ''))
 		while True:
 			try:
 				safe_queue = multiprocessing.Queue()
-				proc = multiprocessing.Process(target=self.parse_text_and_next_postfix, args=(safe_queue, self._url, self._output, self._Headers, self._Proxies, self._gbk, self.parse, self.next_page, self._verbose))
+				proc = multiprocessing.Process(target=self.parse_text_and_next_postfix, args=(safe_queue, self._url, self._Headers, self._Proxies, self._gbk, self.parse, self.next_page, pickle.dumps(self)))
 				proc.start()
-				contents, next_page_exist, postfix = safe_queue.get(timeout=self._parse_contents_waiting_time)
+				new_self_str, contents, next_page_exist, postfix = safe_queue.get(timeout=self._parse_contents_waiting_time)
+				# some attributes may be modified inside the parse and next_page methods, so update these things
+				new_self = pickle.loads(new_self_str)
+				for attr in new_added_attributes:
+					setattr(self, attr, getattr(new_self, attr))
 				self.set_postfix(postfix)
 				self.write_contents(hfile, contents)
 				if (not next_page_exist) or (self._end_page and self._url == self._end_page):
@@ -131,6 +146,7 @@ class GenericDownloader:
 					print('----------------------------------over----------------------------------')
 			except Exception as e:
 				print('Exception occurred!!!')
+				print(traceback.format_exc())
 				if isinstance(e, queue.Empty):
 					proc.terminate()
 					print('Method parse_and_write executed too much time, may be blocked by some reason, rerun.')
@@ -150,19 +166,21 @@ class GenericDownloader:
 
 	# two methods must be overridden
 	@staticmethod
-	def parse(bsobj):
+	def parse(bsobj, dlobj):
 		"""
 		Parse beautifulsoup object to get text and title
 		:param bsobj: BS4 object
+		:param dlobj: Downloader object, used for transfer self-defined parameters
 		:return: Contents(text, title, title_write_flag)
 		"""
 		return Contents('', '', False)
 
 	@staticmethod
-	def next_page(bsobj):
+	def next_page(bsobj, dlobj):
 		"""
 		Turn to next page with set_postfix() and set_full_url() methods
 		:param bsobj: BS4 object
+		:param dlobj: Downloader object, used for transfer self-defined parameters
 		:return: (bool, postfix), True means next page set okay, False means this whole activity is done (if end_page is set, this method can leave it behind)
 		"""
 		return False, None

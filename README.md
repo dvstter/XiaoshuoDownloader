@@ -11,6 +11,8 @@
 
 ✅ - **simpler overridden methods**
 
+✅ - **support directory-first-content-then mode**
+
 ## Development Progress:
 
 ## Usage:
